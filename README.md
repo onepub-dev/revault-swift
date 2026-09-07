@@ -25,7 +25,7 @@ agent classes for macOS and Linux.
 ## Installation and native runtime
 
 ```swift
-.package(url: "https://github.com/onepub-dev/revault-swift", exact: "0.3.13")
+.package(url: "https://github.com/onepub-dev/revault-swift", exact: "0.3.14")
 ```
 
 On macOS, the published Swift package downloads the release's
