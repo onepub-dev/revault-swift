@@ -58,6 +58,10 @@ func archiveLifecycle() throws {
     try box.clearDescription(); try check(try box.description == nil, "description cleared")
     try box.setVariable("normal", "value"); pass("lockbox_set_variable")
     try check(try box.getVariable("normal") == "value", "variable"); pass("lockbox_get_variable", 3)
+    _ = try box.itemDescription("variable", "normal", operation: "set", text: "Purpose\nSecond line")
+    try check(try box.itemDescription("variable", "normal") == "Purpose\nSecond line", "item description")
+    _ = try box.itemDescription("variable", "normal", operation: "clear")
+    pass("lockbox_item_description", 3)
     try box.moveVariables(moves("normal", "moved")); try check(try box.getVariable("moved") == "value", "moved variable")
     try box.moveVariables(moves("moved", "normal")); pass("lockbox_move_variables", 3)
     try box.setSecretVariable("secret", data("hidden")); pass("lockbox_set_secret_variable")
@@ -193,6 +197,8 @@ func vaultLifecycle() throws {
     try vault.rememberAccessSlotLabel(id, 7, "primary"); _ = try vault.listAccessSlotLabels(id); _ = try vault.findAccessSlotLabels(id, "primary"); pass("vault_directory_remember_access_slot_label"); pass("vault_directory_list_access_slot_labels"); pass("vault_directory_find_access_slot_labels")
     try vault.rememberPassword(id, password); _ = try vault.rememberedPassword(id); pass("vault_directory_remember_password"); pass("vault_directory_remembered_password", 3)
     let vaultForm = try vault.defineForm("login", "Login", "Login form", fields()); _ = try vault.resolveForm("login"); _ = try vault.listForms(); pass("vault_directory_define_form"); pass("vault_directory_resolve_form"); pass("vault_directory_list_forms")
+    try check(try vault.itemDescription("definition", "login") == "Login form", "vault description")
+    pass("vault_directory_item_description")
     _ = try vault.listFormRevisions(vaultForm.typeId); pass("vault_directory_list_form_revisions", 2)
     _ = try vault.seedForms(); pass("vault_directory_seed_forms"); _ = try vault.listFormAliases(); pass("vault_directory_list_form_aliases")
     try vault.forgetAccessSlotLabel(id, 7); try vault.forgetLockbox("/tmp/example.lbox"); try vault.deleteContact("bob"); pass("vault_directory_forget_access_slot_label"); pass("vault_directory_forget_lockbox"); pass("vault_directory_delete_contact")
@@ -203,6 +209,14 @@ func vaultLifecycle() throws {
     try check(try api.probeVaultStructureVersion(root, password) == current, "vault probe")
     pass("vault_directory_probe_structure_version", 2)
     let readonly = try api.openReadOnlyVault(root, password); _ = try readonly.listProfileNames(); _ = try readonly.listContactNames(); _ = try readonly.listFormAliases(); _ = try readonly.listKnownLockboxes()
+    let readKey = try readonly.loadPrivateKey("alice"); try check(!readKey.privateBytes().isEmpty, "read-only private key"); try readKey.free(); pass("vault_read_only_load_private_key")
+    let readHistory = try readonly.loadPrivateKeyGeneration("alice", 1); try check(!readHistory.privateBytes().isEmpty, "read-only private-key history"); try readHistory.free(); pass("vault_read_only_load_private_key_generation")
+    let readSigner = try readonly.loadProfileSigningKey("alice"); try check(!readSigner.publicBytes().isEmpty, "read-only signer"); try readSigner.dispose(); pass("vault_read_only_load_owner_signing_key")
+    let signerHistory = try readonly.loadProfileSigningKeyGeneration("alice", 1); try check(!signerHistory.publicBytes().isEmpty, "read-only signer history"); try signerHistory.dispose(); pass("vault_read_only_load_owner_signing_key_generation")
+    var missingPassword = false
+    do { _ = try readonly.withProfilePassword("missing") { _ in true } } catch { missingPassword = true }
+    try check(missingPassword, "read-only missing password profile"); pass("vault_read_only_load_profile_password")
+    try check(try readonly.withRememberedPassword(id) { !$0.isEmpty } == true, "read-only remembered password"); pass("vault_read_only_remembered_password")
     pass("vault_read_only_open"); pass("vault_read_only_list_profile_names", 2); pass("vault_read_only_list_contact_names"); pass("vault_read_only_list_form_aliases", 2); pass("vault_read_only_list_known_lockboxes")
     let persistedAliases = try readonly.listLockboxAliases()
     try check(persistedAliases.count == 1 && persistedAliases[0].name == "portable", "persisted read-only alias")
@@ -213,6 +227,9 @@ func vaultLifecycle() throws {
     try api.openVault(root, changed).free(); pass("vault_directory_open"); print("ARTIFACT\tswift\tvault-opened\t\(root)")
     try api.openOrCreateVault(root, changed).free(); pass("vault_directory_open_or_create")
     try ownerPublic.dispose(); try owner.dispose(); try contactPublic.publicFree(); try contact.free(); try profile.free()
+    let exchange = try api.contactExchange(root + "/local-vault.lbox", changed); pass("contact_exchange_open")
+    try check(try exchange.list(offline: true).isEmpty, "empty exchange status"); pass("contact_exchange_execute")
+    exchange.close(); pass("contact_exchange_free")
 }
 
 func defaultVault() throws {

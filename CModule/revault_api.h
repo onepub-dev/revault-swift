@@ -79,7 +79,7 @@ void *lockbox_create_contact_with_signing_key(const void *contact, const void *s
 void *lockbox_create_with_signing_key(const uint8_t *content_key, size_t key_len, const void *signing_key);
 /** Opens an existing lockbox. */
 // BEGIN generated file operation declaration
-/** Native file operation; mode is open/create/replace. A signer selects exclusive write access. See file_api.rs for credential, tuning and ownership contracts. */
+/** Native file operation; mode is open/read/write/create/replace. Credential unencrypted opens only an existing plaintext file read-only, with no secret or signer. See file_api.rs for tuning and ownership contracts. */
 void *lockbox_file(const char *path, size_t path_len, const char *mode, size_t mode_len, const char *credential, size_t credential_len, const uint8_t *secret, size_t secret_len, const void *contact, const void *signer, const char *cache_mode, size_t cache_len, uint64_t cache_bytes, const char *workload, size_t workload_len, const char *worker, size_t worker_len, size_t jobs);
 // END generated file operation declaration
 /** Opens existing in-memory archive bytes. */
@@ -156,6 +156,12 @@ bool lockbox_set_variable(void *handle, const char *name, size_t name_len, const
 bool lockbox_set_secret_variable(void *handle, const char *name, size_t name_len, const uint8_t *value, size_t value_len);
 /** Returns variable. */
 RevaultBuffer lockbox_get_variable(const void *handle, const char *name, size_t name_len);
+/** Executes a bounded ContactExchangeCommand JSON request through Rust and returns a ContactExchangeStatusList FlatBuffer. Free the buffer with buffer_free. No private capabilities are returned. */
+RevaultBuffer contact_exchange_execute(const void *handle, const char *name, size_t name_len);
+/** Get/set/clear item guidance via UTF-8 JSON {target, reference, operation, field?, text?}; returns OptionalString. Commit Lockbox writes. */
+RevaultBuffer lockbox_item_description(const void *handle, const char *request, size_t request_len);
+/** Same request/result contract for reusable vault definitions and fields; writes commit immediately. */
+RevaultBuffer vault_directory_item_description(const void *handle, const char *request, size_t request_len);
 /** Returns an opaque secret handle through `output`; inspect, copy, and free it promptly. */
 bool lockbox_get_secret_variable(const void *handle, const char *name, size_t name_len, void **output);
 /** Removes variable. */
@@ -298,6 +304,8 @@ RevaultBuffer vault_key_hex_encode(const uint8_t *bytes, size_t len);
 RevaultBuffer vault_key_hex_decode(const char *text, size_t len);
 /** Returns the directory open. */
 void *vault_directory_open(const char *root, size_t root_len, const uint8_t *password, size_t password_len);
+/** Opens an exchange session for an existing Vault file. Retains a protected passphrase but no Vault lock; never uses the Session Agent. Release with contact_exchange_free. */
+void *contact_exchange_open(const char *root, size_t root_len, const uint8_t *password, size_t password_len);
 /** Returns the structure version current. */
 uint32_t vault_structure_version_current(void);
 /** Returns the directory probe structure version. */
@@ -404,10 +412,24 @@ RevaultBuffer vault_backup_default(const char *path, size_t path_len, bool overw
 RevaultBuffer vault_restore_default(const char *path, size_t path_len, bool overwrite);
 /** Returns the directory free. */
 void vault_directory_free(void *handle);
+/** Releases the exchange session and protected credentials without cancelling invitations or deleting contacts. */
+void contact_exchange_free(void *handle);
 /** Returns only open. */
 void *vault_read_only_open(const char *root, size_t root_len, const uint8_t *password, size_t password_len);
 /** Returns only open default. */
 void *vault_read_only_open_default(const uint8_t *password, size_t password_len);
+/** Reads a stored profile private key. Free the returned handle with key_contact_free. */
+void *vault_read_only_load_private_key(const void *handle, const char *name, size_t name_len);
+/** Reads one stored historical profile private key. */
+void *vault_read_only_load_private_key_generation(const void *handle, const char *name, size_t name_len, uint16_t index);
+/** Reads a stored signing key; a missing key returns NotFound without creating one. Free with key_signing_free. */
+void *vault_read_only_load_owner_signing_key(const void *handle, const char *name, size_t name_len);
+/** Reads one stored historical signing key. */
+void *vault_read_only_load_owner_signing_key_generation(const void *handle, const char *name, size_t name_len, uint16_t index);
+/** Reads a password profile into an opaque secret. Free it with secret_free. */
+void *vault_read_only_load_profile_password(const void *handle, const char *name, size_t name_len);
+/** Reads a remembered Lockbox password; null output means none. Free it with secret_free. */
+bool vault_read_only_remembered_password(const void *handle, const uint8_t *id, size_t id_len, void **output);
 /** Returns only list profile names. */
 RevaultBuffer vault_read_only_list_profile_names(const void *handle);
 /** Returns only list contact names. */

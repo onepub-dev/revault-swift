@@ -4,6 +4,46 @@ import Foundation
 /// Identifies the filesystem object stored at a lockbox path.
 public enum LockboxEntryKind: Int { case unspecified, file, symlink, directory }
 
+/// Public reciprocal exchange status. Verification is a local trust decision; no management capability or private key is returned.
+public struct ContactExchangeStatus {
+    /// Random identifier of the saved exchange.
+    public let id: String
+    /// Pinned HTTPS relay origin.
+    public let relay: String
+    /// Invitation URL to share only with the intended recipient.
+    public let invitation: String
+    /// Signed claimed inviter email, not independently verified by the relay.
+    public let inviterEmail: String
+    /// Signed claimed intended recipient email.
+    public let recipientEmail: String
+    /// Full shared fingerprint to compare independently; empty until both contributions are available.
+    public let fingerprint: String
+    /// Signed invitation expiry in Unix milliseconds.
+    public let expiresMs: UInt64
+    /// Whether both signed public key bundles are locally pinned.
+    public let accepted: Bool
+    /// Whether this Vault independently verified and saved the contact.
+    public let verified: Bool
+    /// Local saved contact name, or empty before verification.
+    public let contactName: String
+    /// Whether the relay operation needs retrying; locally saved state is retained.
+    public let relayPending: Bool
+    /// Creates an application-owned ContactExchangeStatus value.
+    public init(id: String, relay: String, invitation: String, inviterEmail: String, recipientEmail: String, fingerprint: String, expiresMs: UInt64, accepted: Bool, verified: Bool, contactName: String, relayPending: Bool) {
+        self.id = id
+        self.relay = relay
+        self.invitation = invitation
+        self.inviterEmail = inviterEmail
+        self.recipientEmail = recipientEmail
+        self.fingerprint = fingerprint
+        self.expiresMs = expiresMs
+        self.accepted = accepted
+        self.verified = verified
+        self.contactName = contactName
+        self.relayPending = relayPending
+    }
+}
+
 /// Metadata for one file, directory, or symbolic link stored at a lockbox path.
 public struct LockboxEntry {
     /// Absolute lockbox path of the stored entry.
@@ -46,12 +86,18 @@ public struct FormField {
     public let kind: String
     /// Whether a record must provide a value for this field.
     public let required: Bool
+    /// Multiline guidance captured by this field definition revision.
+    public let description: String
+    /// Whether guidance is present, including explicitly empty text.
+    public let hasDescription: Bool
     /// Creates an application-owned FormField value.
-    public init(id: String, label: String, kind: String, required: Bool) {
+    public init(id: String, label: String, kind: String, required: Bool, description: String = "", hasDescription: Bool = false) {
         self.id = id
         self.label = label
         self.kind = kind
         self.required = required
+        self.description = description
+        self.hasDescription = hasDescription
     }
 }
 
@@ -116,14 +162,20 @@ public struct FormRecord {
     public let definitionRevision: UInt32
     /// Ordered non-secret field metadata and values.
     public let values: [FormValue]
+    /// Multiline context specific to this record.
+    public let description: String
+    /// Whether the record description is present, including empty text.
+    public let hasDescription: Bool
     /// Creates an application-owned FormRecord value.
-    public init(path: String, name: String, typeId: String, definitionAlias: String, definitionRevision: UInt32, values: [FormValue]) {
+    public init(path: String, name: String, typeId: String, definitionAlias: String, definitionRevision: UInt32, values: [FormValue], description: String = "", hasDescription: Bool = false) {
         self.path = path
         self.name = name
         self.typeId = typeId
         self.definitionAlias = definitionAlias
         self.definitionRevision = definitionRevision
         self.values = values
+        self.description = description
+        self.hasDescription = hasDescription
     }
 }
 
@@ -426,10 +478,16 @@ public struct Variable {
     public let name: String
     /// Whether the value is ordinary text or a protected secret.
     public let sensitivity: String
+    /// Multiline description stored with this variable.
+    public let description: String
+    /// Whether the variable description is present, including empty text.
+    public let hasDescription: Bool
     /// Creates an application-owned Variable value.
-    public init(name: String, sensitivity: String) {
+    public init(name: String, sensitivity: String, description: String = "", hasDescription: Bool = false) {
         self.name = name
         self.sensitivity = sensitivity
+        self.description = description
+        self.hasDescription = hasDescription
     }
 }
 
@@ -564,6 +622,12 @@ public struct ErrorDetails {
 }
 
 enum DomainCodec {
+    private static func convert(_ value: revault_internal__ContactExchangeStatusT) -> ContactExchangeStatus {
+        ContactExchangeStatus(id: value.id ?? "", relay: value.relay ?? "", invitation: value.invitation ?? "", inviterEmail: value.inviterEmail ?? "", recipientEmail: value.recipientEmail ?? "", fingerprint: value.fingerprint ?? "", expiresMs: value.expiresMs, accepted: value.accepted, verified: value.verified, contactName: value.contactName ?? "", relayPending: value.relayPending)
+    }
+    static func contactExchangeStatus(_ data: Data) -> ContactExchangeStatus {
+        var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__ContactExchangeStatus = getRoot(byteBuffer: &buffer); return convert(root.unpack())
+    }
     private static func convert(_ value: revault_internal__LockboxEntryT) -> LockboxEntry {
         LockboxEntry(path: value.path ?? "", kind: LockboxEntryKind(rawValue: Int(value.kind.rawValue)) ?? .unspecified, length: value.length, permissions: value.permissions)
     }
@@ -577,7 +641,7 @@ enum DomainCodec {
         var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__PathMove = getRoot(byteBuffer: &buffer); return convert(root.unpack())
     }
     private static func convert(_ value: revault_internal__FormFieldT) -> FormField {
-        FormField(id: value.id ?? "", label: value.label ?? "", kind: value.kind ?? "", required: value.required_)
+        FormField(id: value.id ?? "", label: value.label ?? "", kind: value.kind ?? "", required: value.required_, description: value.description ?? "", hasDescription: value.hasDescription)
     }
     static func formField(_ data: Data) -> FormField {
         var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__FormField = getRoot(byteBuffer: &buffer); return convert(root.unpack())
@@ -595,7 +659,7 @@ enum DomainCodec {
         var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__FormValue = getRoot(byteBuffer: &buffer); return convert(root.unpack())
     }
     private static func convert(_ value: revault_internal__FormRecordT) -> FormRecord {
-        FormRecord(path: value.path ?? "", name: value.name ?? "", typeId: value.typeId ?? "", definitionAlias: value.definitionAlias ?? "", definitionRevision: value.definitionRevision, values: value.values.compactMap { $0 }.map(convert))
+        FormRecord(path: value.path ?? "", name: value.name ?? "", typeId: value.typeId ?? "", definitionAlias: value.definitionAlias ?? "", definitionRevision: value.definitionRevision, values: value.values.compactMap { $0 }.map(convert), description: value.description ?? "", hasDescription: value.hasDescription)
     }
     static func formRecord(_ data: Data) -> FormRecord {
         var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__FormRecord = getRoot(byteBuffer: &buffer); return convert(root.unpack())
@@ -685,7 +749,7 @@ enum DomainCodec {
         var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__RuntimeOptions = getRoot(byteBuffer: &buffer); return convert(root.unpack())
     }
     private static func convert(_ value: revault_internal__VariableT) -> Variable {
-        Variable(name: value.name ?? "", sensitivity: value.sensitivity ?? "")
+        Variable(name: value.name ?? "", sensitivity: value.sensitivity ?? "", description: value.description ?? "", hasDescription: value.hasDescription)
     }
     static func variable(_ data: Data) -> Variable {
         var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__Variable = getRoot(byteBuffer: &buffer); return convert(root.unpack())
@@ -756,6 +820,9 @@ enum DomainCodec {
     static func contactList(_ data: Data) -> [Contact] {
         var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__ContactList = getRoot(byteBuffer: &buffer); return root.unpack().values.compactMap { $0 }.map(convert)
     }
+    static func contactExchangeStatusList(_ data: Data) -> [ContactExchangeStatus] {
+        var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__ContactExchangeStatusList = getRoot(byteBuffer: &buffer); return root.unpack().values.compactMap { $0 }.map(convert)
+    }
     static func lockboxAliasList(_ data: Data) -> [LockboxAlias] {
         var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__LockboxAliasList = getRoot(byteBuffer: &buffer); return root.unpack().values.compactMap { $0 }.map(convert)
     }
@@ -777,5 +844,5 @@ enum DomainCodec {
     static func optionalFormRecord(_ data: Data) -> FormRecord? { var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__OptionalFormRecord = getRoot(byteBuffer: &buffer); return root.unpack().value.map(convert) }
     static func optionalFormValue(_ data: Data) -> FormValue? { var buffer = ByteBuffer(bytes: [UInt8](data)); var root: revault_internal__OptionalFormValue = getRoot(byteBuffer: &buffer); return root.unpack().value.map(convert) }
     static func encodePathMoves(_ values: [PathMove]) -> Data { var builder = FlatBufferBuilder(initialSize: 256); var offsets: [Offset] = []; for value in values { let source = builder.create(string: value.source); let destination = builder.create(string: value.destination); offsets.append(revault_internal__PathMove.createPathMove(&builder, sourceOffset: source, destinationOffset: destination)) }; let vector = builder.createVector(ofOffsets: offsets); let root = revault_internal__PathMoveList.createPathMoveList(&builder, valuesVectorOffset: vector); builder.finish(offset: root); return Data(builder.sizedByteArray) }
-    static func encodeFormFields(_ values: [FormField]) -> Data { var builder = FlatBufferBuilder(initialSize: 256); var offsets: [Offset] = []; for value in values { let id = builder.create(string: value.id); let label = builder.create(string: value.label); let kind = builder.create(string: value.kind); offsets.append(revault_internal__FormField.createFormField(&builder, idOffset: id, labelOffset: label, kindOffset: kind, required_: value.required)) }; let vector = builder.createVector(ofOffsets: offsets); let root = revault_internal__FormFieldList.createFormFieldList(&builder, valuesVectorOffset: vector); builder.finish(offset: root); return Data(builder.sizedByteArray) }
+    static func encodeFormFields(_ values: [FormField]) -> Data { var builder = FlatBufferBuilder(initialSize: 256); var offsets: [Offset] = []; for value in values { let id = builder.create(string: value.id); let label = builder.create(string: value.label); let kind = builder.create(string: value.kind); let description = builder.create(string: value.description); offsets.append(revault_internal__FormField.createFormField(&builder, idOffset: id, labelOffset: label, kindOffset: kind, required_: value.required, descriptionOffset: description, hasDescription: value.hasDescription)) }; let vector = builder.createVector(ofOffsets: offsets); let root = revault_internal__FormFieldList.createFormFieldList(&builder, valuesVectorOffset: vector); builder.finish(offset: root); return Data(builder.sizedByteArray) }
 }
