@@ -4,7 +4,7 @@ import PackageDescription
 #if os(Linux)
 let revaultC: Target = .systemLibrary(name: "RevaultC", path: "CModule")
 #else
-let revaultC: Target = .binaryTarget(name: "RevaultC", url: "https://github.com/onepub-dev/reVault/releases/download/revault-api-v0.6.0/RevaultC.xcframework.zip", checksum: "0d2e35708328a4c4f5b8aaa34606f256738c095a23410203034d76791471c8f9")
+let revaultC: Target = .binaryTarget(name: "RevaultC", url: "https://github.com/onepub-dev/reVault/releases/download/revault-api-v0.6.1/RevaultC.xcframework.zip", checksum: "71d94c26bd5c6e80cb068f824f686d6c5257d9eb3cec8b1a37db8e69fd79d69f")
 #endif
 
 let package = Package(
